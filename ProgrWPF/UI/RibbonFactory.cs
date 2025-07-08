@@ -56,13 +56,16 @@ namespace ProgrWPF.UI
             };
 
             // Create tabs
-            ribbonTabControl.Items.Add(CreateTabItem("Home", new Dictionary<string, string[]> 
+            ribbonTabControl.Items.Add(CreateTabItem("Home", new Dictionary<string, string[]>
             {
-                { "Rules", new[] { "Manage rules", "Create new" } },
-                { "Model", new[] { "Edit model", "View details" } },
-                { "Part", new[] { "Select part", "Analyze" } }
+                { "Rules", new[] { "Editor", "Tools" } },
+                { "Model", new[] { "Design", "Import" } },
+                { "Part", new[] { "V", "DME" } },
+                { "Align", new[] { "Part", "Alignment" } },
+                { "Measurement", new[] { "Program", "Generation" } }
             }));
-          ribbonTabControl.Items.Add(CreateTabItem("View", null)); // Special content
+
+            ribbonTabControl.Items.Add(CreateTabItem("View", null)); // Special content
 
             ribbonGrid.Children.Add(ribbonTabControl);
 
@@ -136,15 +139,8 @@ namespace ProgrWPF.UI
             };
 
             var stackPanel = new StackPanel();
-
-            // Placeholder for an icon
-            var iconPlaceholder = new Ellipse
-            {
-                Width = 32,
-                Height = 32,
-                Fill = new SolidColorBrush(Colors.DodgerBlue),
-                Margin = new Thickness(0, 5, 0, 5)
-            };
+            var iconElement = IconProvider.GetIcon(text);
+            stackPanel.Children.Add(iconElement);
 
             var textStackPanel = new StackPanel
             {
@@ -152,12 +148,34 @@ namespace ProgrWPF.UI
             };
 
             textStackPanel.Children.Add(new TextBlock { Text = text, TextAlignment = TextAlignment.Center, FontSize = 11 });
-            foreach (var desc in descriptions)
+
+            for (int i = 0; i < descriptions.Length; i++)
             {
-                textStackPanel.Children.Add(new TextBlock { Text = desc, TextAlignment = TextAlignment.Center, FontSize = 9, Foreground = Brushes.Gray });
+                if (i == descriptions.Length - 1 && descriptions.Length > 1)
+                {
+                    var separator = new Border
+                    {
+                        Width = 80,
+                        Height = 1,
+                        Background = Brushes.LightGray,
+                        Margin = new Thickness(0, 2, 0, 2)
+                    };
+                    textStackPanel.Children.Add(separator);
+                }
+
+                var textBlock = new TextBlock
+                {
+                    Text = descriptions[i],
+                    FontSize = i == 0 ? 11 : 9,
+                    TextAlignment = TextAlignment.Center
+                };
+
+                if (i != 0)
+                    textBlock.Foreground = Brushes.Gray;
+
+                textStackPanel.Children.Add(textBlock);
             }
 
-            stackPanel.Children.Add(iconPlaceholder);
             stackPanel.Children.Add(textStackPanel);
             section.Child = stackPanel;
 

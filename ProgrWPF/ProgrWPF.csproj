@@ -141,6 +141,7 @@
   <ItemGroup>
     <Compile Include="MainWindow.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="Services\IconProvider.cs" />
     <Compile Include="UI\CenterPanelFactory.cs" />
     <Compile Include="UI\LeftPanelFactory.cs" />
     <Compile Include="UI\RibbonFactory.cs" />
@@ -162,6 +163,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Services\Icons\amsn.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

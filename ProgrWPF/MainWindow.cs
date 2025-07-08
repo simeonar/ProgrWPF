@@ -32,8 +32,8 @@ namespace ProgrWPF
         private ProgressBar statusProgressBar;
         private TextBlock statusPercentage;
 
-        private double expandedMenuHeight = 150.0;
-        private double collapsedMenuHeight = 80.0; // Reduced for compactness
+        private double expandedMenuHeight = 130.0;
+        private double collapsedMenuHeight = 80.0; 
 
         public MainWindow()
         {
@@ -217,8 +217,6 @@ namespace ProgrWPF
                 }
             }
         }
-
-        // CreateLeftPanelContent is now removed, as it is in LeftPanelFactory.
 
         private void ToggleLeftPanel(object sender, RoutedEventArgs e)
         {
