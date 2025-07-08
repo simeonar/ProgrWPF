@@ -1,4 +1,5 @@
 using ProgrWPF.Data;
+using ProgrWPF.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,16 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Shapes; // Added for Ellipse
-using System.Windows.Threading;
-using System.Threading.Tasks;
 using Microsoft.Win32; // For SaveFileDialog
 using System.IO;       // For File operations
-using System.Text;     // For StringBuilder
-using System.Linq;     // For Count(p => ...)
-using MigraDoc.DocumentObjectModel;
-using MigraDoc.DocumentObjectModel.Tables;
-using MigraDoc.Rendering;
-using PdfSharp.Pdf;
 
 namespace ProgrWPF.UI
 {
@@ -27,10 +20,27 @@ namespace ProgrWPF.UI
 
         private TreeView resultsTreeView;
         private ObservableCollection<MeasurementResult> measurementResults;
-        private DispatcherTimer simulationTimer;
-        private List<CmmPoint> pointsToMeasure;
-        private int currentPointIndex;
-        private Random random = new Random(); // Reusable Random instance
+        private readonly ReportService reportService;
+        private readonly MeasurementService measurementService;
+
+        public RightPanelFactory()
+        {
+            reportService = new ReportService();
+            measurementService = new MeasurementService();
+
+            // Subscribe to MeasurementService events to update the UI
+            measurementService.PointMeasurementStarted += (result) => result.UpdateDetails();
+            measurementService.PointMeasurementCompleted += (result) => result.UpdateDetails();
+            measurementService.MeasurementReset += (results) => {
+                foreach(var result in results)
+                {
+                    result.UpdateDetails();
+                }
+            };
+
+            // Forward the progress event
+            measurementService.PointMeasurementProgress += (args) => MeasurementProgressChanged?.Invoke(this, args);
+        }
 
         public System.Windows.Controls.Border CreateRightPanel()
         {
@@ -69,13 +79,6 @@ namespace ProgrWPF.UI
 
             Grid.SetRow(resultsTreeView, 1);
             mainGrid.Children.Add(resultsTreeView);
-
-            // Initialize simulation timer
-            simulationTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            simulationTimer.Tick += SimulationTimer_Tick;
 
             return rightPanel;
         }
@@ -120,127 +123,7 @@ namespace ProgrWPF.UI
             {
                 try
                 {
-                    // --- Create Document ---
-                    Document document = new Document();
-                    document.Info.Title = "CMM Measurement Report";
-                    document.Info.Author = "ProgrWPF CMM Application";
-
-                    // --- Page Setup ---
-                    Section section = document.AddSection();
-                    section.PageSetup.Orientation = MigraDoc.DocumentObjectModel.Orientation.Landscape;
-                    section.PageSetup.LeftMargin = Unit.FromCentimeter(1.5);
-                    section.PageSetup.RightMargin = Unit.FromCentimeter(1.5);
-                    section.PageSetup.TopMargin = Unit.FromCentimeter(2.5);
-                    section.PageSetup.BottomMargin = Unit.FromCentimeter(2.0);
-
-                    // --- Header ---
-                    Paragraph header = section.Headers.Primary.AddParagraph();
-                    header.AddText("ProgrWPF CMM // Measurement Report");
-                    header.Format.Font.Size = 9;
-                    header.Format.Alignment = ParagraphAlignment.Right;
-
-                    // --- Footer ---
-                    Paragraph footer = section.Footers.Primary.AddParagraph();
-                    footer.AddText("Page ");
-                    footer.AddPageField();
-                    footer.AddText(" of ");
-                    footer.AddNumPagesField();
-                    footer.Format.Font.Size = 9;
-                    footer.Format.Alignment = ParagraphAlignment.Center;
-
-                    // --- Title ---
-                    Paragraph title = section.AddParagraph("Measurement Report");
-                    title.Format.Font.Size = 24;
-                    title.Format.Font.Bold = true;
-                    title.Format.Alignment = ParagraphAlignment.Center;
-                    title.Format.SpaceAfter = Unit.FromCentimeter(1);
-
-                    // --- Summary Section ---
-                    int totalPoints = measurementResults.Count;
-                    int passedPoints = measurementResults.Count(r => r.Status == MeasurementStatus.Passed);
-                    int failedPoints = measurementResults.Count(r => r.Status == MeasurementStatus.Failed);
-
-                    Paragraph summary = section.AddParagraph();
-                    summary.AddFormattedText("Summary:", TextFormat.Bold);
-                    summary.AddText($" Total Points: {totalPoints} | ");
-                    summary.AddFormattedText($"Passed: {passedPoints}", TextFormat.Bold);
-                    summary.AddText(" | ");
-                    summary.AddFormattedText($"Failed: {failedPoints}", TextFormat.Bold);
-                    summary.Format.Font.Size = 11;
-                    summary.Format.SpaceAfter = Unit.FromCentimeter(1);
-
-                    // --- Results Table ---
-                    Table table = section.AddTable();
-                    table.Borders.Width = 0.25;
-                    table.Borders.Color = MigraDoc.DocumentObjectModel.Colors.Gray;
-
-                    // Define columns - adjusted for landscape
-                    double[] columnWidths = { 140, 55, 80, 50, 50, 50, 50, 50, 50, 65, 65 };
-                    foreach (var width in columnWidths)
-                    {
-                        table.AddColumn(Unit.FromPoint(width));
-                    }
-
-                    // Create header row
-                    Row headerRow = table.AddRow();
-                    headerRow.HeadingFormat = true;
-                    headerRow.Format.Font.Bold = true;
-                    headerRow.Format.Font.Size = 9;
-                    headerRow.Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightGray;
-                    headerRow.VerticalAlignment = MigraDoc.DocumentObjectModel.Tables.VerticalAlignment.Center;
-
-                    string[] headers = { "Point Name", "Status", "Timestamp", "Exp. X", "Exp. Y", "Exp. Z", "Act. X", "Act. Y", "Act. Z", "Deviation", "Tolerance" };
-                    for (int i = 0; i < headers.Length; i++)
-                    {
-                        headerRow.Cells[i].AddParagraph(headers[i]);
-                    }
-
-                    // Add data rows
-                    int rowIndex = 0;
-                    foreach (var result in measurementResults)
-                    {
-                        Row row = table.AddRow();
-                        row.Height = Unit.FromCentimeter(0.6);
-                        row.VerticalAlignment = MigraDoc.DocumentObjectModel.Tables.VerticalAlignment.Center;
-                        row.Format.Font.Size = 8;
-
-                        // Alternating row color
-                        if (rowIndex % 2 == 1)
-                        {
-                            row.Shading.Color = MigraDoc.DocumentObjectModel.Colors.WhiteSmoke;
-                        }
-                        rowIndex++;
-
-                        row.Cells[0].AddParagraph(result.PointName);
-                        row.Cells[1].AddParagraph(result.Status.ToString());
-                        row.Cells[2].AddParagraph(result.Timestamp.ToString("g"));
-                        row.Cells[3].AddParagraph(result.ExpectedX.ToString("F4"));
-                        row.Cells[4].AddParagraph(result.ExpectedY.ToString("F4"));
-                        row.Cells[5].AddParagraph(result.ExpectedZ.ToString("F4"));
-                        row.Cells[6].AddParagraph(result.ActualX.ToString("F4"));
-                        row.Cells[7].AddParagraph(result.ActualY.ToString("F4"));
-                        row.Cells[8].AddParagraph(result.ActualZ.ToString("F4"));
-                        row.Cells[9].AddParagraph(result.Deviation.ToString("F4"));
-                        row.Cells[10].AddParagraph(result.Tolerance.ToString("F4"));
-
-                        // Color code status cell
-                        switch (result.Status)
-                        {
-                            case MeasurementStatus.Passed:
-                                row.Cells[1].Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightGreen;
-                                break;
-                            case MeasurementStatus.Failed:
-                                row.Cells[1].Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightCoral;
-                                break;
-                        }
-                    }
-
-                    // --- Render and Save ---
-                    PdfDocumentRenderer renderer = new PdfDocumentRenderer();
-                    renderer.Document = document;
-                    renderer.RenderDocument();
-                    renderer.PdfDocument.Save(saveFileDialog.FileName);
-
+                    reportService.ExportToPdf(measurementResults, saveFileDialog.FileName);
                     MessageBox.Show($"Report successfully saved to {saveFileDialog.FileName}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
@@ -269,29 +152,7 @@ namespace ProgrWPF.UI
             {
                 try
                 {
-                    var sb = new StringBuilder();
-                    // Add header row
-                    sb.AppendLine("PointName,Status,Timestamp,ExpectedX,ExpectedY,ExpectedZ,ActualX,ActualY,ActualZ,Deviation,Tolerance");
-
-                    // Add data rows
-                    foreach (var result in measurementResults)
-                    {
-                        var line = string.Join(",",
-                            string.Format("\"{0}\"", result.PointName.Replace("\"", "\"\"")), // Handle commas/quotes in name
-                            result.Status,
-                            result.Timestamp.ToString("o"), // ISO 8601 format for consistency
-                            result.ExpectedX,
-                            result.ExpectedY,
-                            result.ExpectedZ,
-                            result.ActualX,
-                            result.ActualY,
-                            result.ActualZ,
-                            result.Deviation,
-                            result.Tolerance);
-                        sb.AppendLine(line);
-                    }
-
-                    File.WriteAllText(saveFileDialog.FileName, sb.ToString());
+                    reportService.ExportToCsv(measurementResults, saveFileDialog.FileName);
                     MessageBox.Show($"Report successfully saved to {saveFileDialog.FileName}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
@@ -383,7 +244,6 @@ namespace ProgrWPF.UI
 
         public void SetPointsToMeasure(List<CmmPoint> points)
         {
-            pointsToMeasure = points;
             measurementResults.Clear();
             foreach (var point in points)
             {
@@ -401,79 +261,24 @@ namespace ProgrWPF.UI
 
         private void Start_Click(object sender, RoutedEventArgs e)
         {
-            if (pointsToMeasure == null || pointsToMeasure.Count == 0)
+            if (measurementResults == null || measurementResults.Count == 0)
             {
                 MessageBox.Show("No points loaded to measure.", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            currentPointIndex = 0;
-            simulationTimer.Start();
+            measurementService.StartMeasurement(measurementResults);
         }
 
-        private void Pause_Click(object sender, RoutedEventArgs e) => simulationTimer.Stop();
+        private void Pause_Click(object sender, RoutedEventArgs e) => measurementService.PauseMeasurement();
 
-        private void Stop_Click(object sender, RoutedEventArgs e)
-        {
-            simulationTimer.Stop();
-            currentPointIndex = 0;
-            // Reset status
-            foreach(var result in measurementResults)
-            {
-                result.Status = MeasurementStatus.NotMeasured;
-                result.UpdateDetails();
-            }
-        }
+        private void Stop_Click(object sender, RoutedEventArgs e) => measurementService.StopMeasurement();
 
         private void Repeat_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.DataContext is MeasurementResult result)
             {
-                MeasurePoint(result);
+                measurementService.RepeatMeasurement(result);
             }
-        }
-
-        private void SimulationTimer_Tick(object sender, EventArgs e)
-        {
-            if (currentPointIndex >= measurementResults.Count)
-            {
-                simulationTimer.Stop();
-                return;
-            }
-
-            var result = measurementResults[currentPointIndex];
-            MeasurePoint(result);
-
-            currentPointIndex++;
-        }
-
-        private async void MeasurePoint(MeasurementResult result)
-        {
-            result.Status = MeasurementStatus.InProgress;
-            result.UpdateDetails();
-            MeasurementProgressChanged?.Invoke(this, (result, 0));
-
-            // Simulate measurement work with progress updates
-            for (int i = 1; i <= 10; i++)
-            {
-                await Task.Delay(100); // Simulate a step of work
-                MeasurementProgressChanged?.Invoke(this, (result, i * 10));
-            }
-
-            // Simulate measurement result
-            result.ActualX = result.ExpectedX + (random.NextDouble() - 0.5) * 0.2;
-            result.ActualY = result.ExpectedY + (random.NextDouble() - 0.5) * 0.2;
-            result.ActualZ = result.ExpectedZ + (random.NextDouble() - 0.5) * 0.2;
-            result.Timestamp = DateTime.Now;
-
-            result.Deviation = Math.Sqrt(
-                Math.Pow(result.ActualX - result.ExpectedX, 2) +
-                Math.Pow(result.ActualY - result.ExpectedY, 2) +
-                Math.Pow(result.ActualZ - result.ExpectedZ, 2)
-            );
-
-            result.Status = result.Deviation <= result.Tolerance ? MeasurementStatus.Passed : MeasurementStatus.Failed;
-            result.UpdateDetails(); // Update the details for the TreeView
-            // The final progress update is handled by the SelectionChanged event logic in MainWindow
         }
     }
 }
