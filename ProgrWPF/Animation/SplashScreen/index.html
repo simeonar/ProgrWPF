@@ -1,0 +1,127 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Mitutoyo Viewer</title>
+    <style>
+        html, body, canvas {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <!-- Babylon.js und glTF-Loader -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.min.js"></script>
+
+    <script>
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+
+        const createScene = function () {
+            const scene = new BABYLON.Scene(engine);
+
+            // Umgebung und Licht
+            const environment = scene.createDefaultEnvironment({
+                createSkybox: true,
+                createGround: false,
+                skyboxSize: 1,
+                groundSize: 1
+            });
+
+            if (scene.lights.length > 0) {
+                scene.lights[0].dispose();
+            }
+
+            const light1 = new BABYLON.DirectionalLight("dir01", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
+            light1.position = new BABYLON.Vector3(20, 40, 20);
+            light1.intensity = 10;
+
+            const light2 = new BABYLON.DirectionalLight("dir02", new BABYLON.Vector3(0.5, -1, -0.5), scene);
+            light2.position = new BABYLON.Vector3(-20, 40, -20);
+            light2.intensity = 10;
+
+            scene.createDefaultCameraOrLight(true, true, true);
+            const camera = scene.activeCamera;
+
+            if (camera instanceof BABYLON.ArcRotateCamera) {
+                camera.wheelPrecision = 50;
+                camera.allowUpsideDown = false;
+            }
+
+            // Modellpfad aus der URL abrufen
+            const params = new URLSearchParams(window.location.search);
+            const userModelPath = params.get("modelPath");
+
+            let rootUrl = "models/";
+            let fileName = "mitutoyo.gltf";
+            let isCustomModel = false;
+
+            if (userModelPath) {
+                const lastSlash = userModelPath.lastIndexOf("/") + 1;
+                rootUrl = userModelPath.substring(0, lastSlash);
+                fileName = userModelPath.substring(lastSlash);
+                isCustomModel = true;
+            }
+
+            // Modell laden
+            BABYLON.SceneLoader.ImportMesh(
+                "", rootUrl, fileName, scene,
+                function (meshes) {
+                    const modelRoot = new BABYLON.TransformNode("modelRoot", scene);
+                    meshes.forEach(mesh => {
+                        if (mesh) mesh.parent = modelRoot;
+                    });
+
+                    if (!isCustomModel) {
+                        modelRoot.rotation.x = Math.PI;
+                    }
+                    modelRoot.computeWorldMatrix(true);
+
+                    const bounds = modelRoot.getHierarchyBoundingVectors(true);
+                    const center = bounds.min.add(bounds.max).scale(0.5);
+                    const size = bounds.max.subtract(bounds.min).length();
+
+                    const pivot = new BABYLON.TransformNode("pivot", scene);
+                    pivot.position = center;
+                    modelRoot.parent = pivot;
+                    modelRoot.position.subtractInPlace(center);
+                    pivot.rotation.y = Math.PI / 2;
+
+                    if (camera instanceof BABYLON.ArcRotateCamera) {
+                        camera.setTarget(pivot.position);
+                        camera.radius = size * 2;
+
+                        if (isCustomModel) {
+                            // 🎯 Kamera von der Seite und von oben – nur für benutzerdefiniertes Modell
+                            camera.alpha = Math.PI / 2;
+                            camera.beta = Math.PI / 3;
+                        }
+                        // Splash: Standardwinkel beibehalten
+                    }
+
+                    scene.onBeforeRenderObservable.add(() => {
+                        pivot.rotation.y -= 0.003;
+                    });
+                },
+                null,
+                function (scene, message) {
+                    console.error("Ошибка при загрузке модели:", message);
+                }
+            );
+
+            return scene;
+        };
+
+        const scene = createScene();
+        engine.runRenderLoop(() => scene.render());
+        window.addEventListener("resize", () => engine.resize());
+    </script>
+</body>
+</html>
+<!-- File: index.html -->
