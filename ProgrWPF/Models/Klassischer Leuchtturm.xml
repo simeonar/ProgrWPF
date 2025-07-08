@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CMM_InspectionPlan>
+  <Points>
+    <Point Name="P1_Base_Corner1">
+      <Coordinates X="10.5" Y="20.2" Z="0.0"/>
+      <Feature Type="Plane" Description="Bottom base plane"/>
+    </Point>
+    <Point Name="P2_Base_Corner2">
+      <Coordinates X="110.5" Y="20.2" Z="0.0"/>
+      <Feature Type="Plane" Description="Bottom base plane"/>
+    </Point>
+    <Point Name="P3_Base_Top">
+      <Coordinates X="60.0" Y="70.0" Z="5.0"/>
+      <Feature Type="Plane" Description="Top base plane"/>
+    </Point>
+    <Point Name="C1_Tower_Bottom">
+      <Coordinates X="60.0" Y="70.0" Z="5.1"/>
+      <Feature Type="Cylinder" Description="Main tower body"/>
+    </Point>
+    <Point Name="C2_Tower_Mid">
+      <Coordinates X="60.0" Y="70.0" Z="50.0"/>
+      <Feature Type="Cylinder" Description="Main tower body"/>
+    </Point>
+    <Point Name="C3_Tower_Top">
+      <Coordinates X="60.0" Y="70.0" Z="95.0"/>
+      <Feature Type="Cylinder" Description="Main tower body"/>
+    </Point>
+    <Point Name="P4_Gallery_Floor">
+      <Coordinates X="60.0" Y="70.0" Z="100.0"/>
+      <Feature Type="Plane" Description="Gallery floor"/>
+    </Point>
+    <Point Name="E1_Gallery_Edge">
+      <Coordinates X="90.0" Y="70.0" Z="100.0"/>
+      <Feature Type="Edge" Description="Outer edge of the gallery"/>
+    </Point>
+    <Point Name="P5_Lantern_Base">
+      <Coordinates X="60.0" Y="70.0" Z="101.0"/>
+      <Feature Type="Plane" Description="Lantern room base"/>
+    </Point>
+    <Point Name="W1_Lantern_Window1">
+      <Coordinates X="75.0" Y="70.0" Z="110.0"/>
+      <Feature Type="Plane" Description="Lantern glass panel 1"/>
+    </Point>
+    <Point Name="W2_Lantern_Window2">
+      <Coordinates X="60.0" Y="85.0" Z="110.0"/>
+      <Feature Type="Plane" Description="Lantern glass panel 2"/>
+    </Point>
+    <Point Name="S1_Roof_Apex">
+      <Coordinates X="60.0" Y="70.0" Z="125.0"/>
+      <Feature Type="Sphere" Description="Top point of the roof"/>
+    </Point>
+    <Point Name="A1_Base_Angle">
+      <Coordinates X="10.5" Y="20.2" Z="2.5"/>
+      <Feature Type="Angle" Description="Angle of the base wall"/>
+    </Point>
+    <Point Name="H1_Door_Hole">
+      <Coordinates X="60.0" Y="25.0" Z="15.0"/>
+      <Feature Type="Hole" Description="Entrance door hole"/>
+    </Point>
+    <Point Name="P6_Ground_Ref">
+      <Coordinates X="0.0" Y="0.0" Z="-10.0"/>
+      <Feature Type="Plane" Description="Reference ground plane"/>
+    </Point>
+  </Points>
+</CMM_InspectionPlan>
