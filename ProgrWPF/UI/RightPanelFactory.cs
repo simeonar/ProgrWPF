@@ -9,6 +9,14 @@ using System.Windows.Media;
 using System.Windows.Shapes; // Added for Ellipse
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32; // For SaveFileDialog
+using System.IO;       // For File operations
+using System.Text;     // For StringBuilder
+using System.Linq;     // For Count(p => ...)
+using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Tables;
+using MigraDoc.Rendering;
+using PdfSharp.Pdf;
 
 namespace ProgrWPF.UI
 {
@@ -24,12 +32,12 @@ namespace ProgrWPF.UI
         private int currentPointIndex;
         private Random random = new Random(); // Reusable Random instance
 
-        public Border CreateRightPanel()
+        public System.Windows.Controls.Border CreateRightPanel()
         {
-            var rightPanel = new Border
+            var rightPanel = new System.Windows.Controls.Border
             {
-                Background = new SolidColorBrush(Colors.WhiteSmoke),
-                BorderBrush = new SolidColorBrush(Colors.LightGray),
+                Background = new SolidColorBrush(System.Windows.Media.Colors.WhiteSmoke),
+                BorderBrush = new SolidColorBrush(System.Windows.Media.Colors.LightGray),
                 BorderThickness = new Thickness(1, 0, 0, 0) // Left border
             };
 
@@ -44,7 +52,7 @@ namespace ProgrWPF.UI
             toolBar.Items.Add(CreateToolBarButton("⏸", "Pause Measurement", Pause_Click));
             toolBar.Items.Add(CreateToolBarButton("⏹", "Stop Measurement", Stop_Click));
             toolBar.Items.Add(new Separator());
-            toolBar.Items.Add(CreateToolBarButton("Export", "Export Results", Export_Click));
+            toolBar.Items.Add(CreateExportMenuButton()); // Replace the simple button with a menu
             Grid.SetRow(toolBar, 0);
             mainGrid.Children.Add(toolBar);
 
@@ -72,6 +80,227 @@ namespace ProgrWPF.UI
             return rightPanel;
         }
 
+        private FrameworkElement CreateExportMenuButton()
+        {
+            var exportMenu = new MenuItem
+            {
+                Header = "Export",
+                ToolTip = "Export measurement results",
+                FontWeight = FontWeights.Bold
+            };
+
+            var pdfMenuItem = new MenuItem { Header = "Export as PDF" };
+            pdfMenuItem.Click += ExportPdf_Click;
+            exportMenu.Items.Add(pdfMenuItem);
+
+            var csvMenuItem = new MenuItem { Header = "Export as CSV" };
+            csvMenuItem.Click += ExportCsv_Click;
+            exportMenu.Items.Add(csvMenuItem);
+
+            var menu = new Menu { Background = Brushes.Transparent, Items = { exportMenu } };
+            return menu;
+        }
+
+        private void ExportPdf_Click(object sender, RoutedEventArgs e)
+        {
+            if (measurementResults == null || measurementResults.Count == 0)
+            {
+                MessageBox.Show("No measurement results to export.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var saveFileDialog = new SaveFileDialog
+            {
+                Filter = "PDF file (*.pdf)|*.pdf|All files (*.*)|*.*",
+                Title = "Save Measurement Report as PDF",
+                FileName = $"MeasurementReport_{DateTime.Now:yyyyMMdd_HHmmss}.pdf"
+            };
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    // --- Create Document ---
+                    Document document = new Document();
+                    document.Info.Title = "CMM Measurement Report";
+                    document.Info.Author = "ProgrWPF CMM Application";
+
+                    // --- Page Setup ---
+                    Section section = document.AddSection();
+                    section.PageSetup.Orientation = MigraDoc.DocumentObjectModel.Orientation.Landscape;
+                    section.PageSetup.LeftMargin = Unit.FromCentimeter(1.5);
+                    section.PageSetup.RightMargin = Unit.FromCentimeter(1.5);
+                    section.PageSetup.TopMargin = Unit.FromCentimeter(2.5);
+                    section.PageSetup.BottomMargin = Unit.FromCentimeter(2.0);
+
+                    // --- Header ---
+                    Paragraph header = section.Headers.Primary.AddParagraph();
+                    header.AddText("ProgrWPF CMM // Measurement Report");
+                    header.Format.Font.Size = 9;
+                    header.Format.Alignment = ParagraphAlignment.Right;
+
+                    // --- Footer ---
+                    Paragraph footer = section.Footers.Primary.AddParagraph();
+                    footer.AddText("Page ");
+                    footer.AddPageField();
+                    footer.AddText(" of ");
+                    footer.AddNumPagesField();
+                    footer.Format.Font.Size = 9;
+                    footer.Format.Alignment = ParagraphAlignment.Center;
+
+                    // --- Title ---
+                    Paragraph title = section.AddParagraph("Measurement Report");
+                    title.Format.Font.Size = 24;
+                    title.Format.Font.Bold = true;
+                    title.Format.Alignment = ParagraphAlignment.Center;
+                    title.Format.SpaceAfter = Unit.FromCentimeter(1);
+
+                    // --- Summary Section ---
+                    int totalPoints = measurementResults.Count;
+                    int passedPoints = measurementResults.Count(r => r.Status == MeasurementStatus.Passed);
+                    int failedPoints = measurementResults.Count(r => r.Status == MeasurementStatus.Failed);
+
+                    Paragraph summary = section.AddParagraph();
+                    summary.AddFormattedText("Summary:", TextFormat.Bold);
+                    summary.AddText($" Total Points: {totalPoints} | ");
+                    summary.AddFormattedText($"Passed: {passedPoints}", TextFormat.Bold);
+                    summary.AddText(" | ");
+                    summary.AddFormattedText($"Failed: {failedPoints}", TextFormat.Bold);
+                    summary.Format.Font.Size = 11;
+                    summary.Format.SpaceAfter = Unit.FromCentimeter(1);
+
+                    // --- Results Table ---
+                    Table table = section.AddTable();
+                    table.Borders.Width = 0.25;
+                    table.Borders.Color = MigraDoc.DocumentObjectModel.Colors.Gray;
+
+                    // Define columns - adjusted for landscape
+                    double[] columnWidths = { 140, 55, 80, 50, 50, 50, 50, 50, 50, 65, 65 };
+                    foreach (var width in columnWidths)
+                    {
+                        table.AddColumn(Unit.FromPoint(width));
+                    }
+
+                    // Create header row
+                    Row headerRow = table.AddRow();
+                    headerRow.HeadingFormat = true;
+                    headerRow.Format.Font.Bold = true;
+                    headerRow.Format.Font.Size = 9;
+                    headerRow.Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightGray;
+                    headerRow.VerticalAlignment = MigraDoc.DocumentObjectModel.Tables.VerticalAlignment.Center;
+
+                    string[] headers = { "Point Name", "Status", "Timestamp", "Exp. X", "Exp. Y", "Exp. Z", "Act. X", "Act. Y", "Act. Z", "Deviation", "Tolerance" };
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        headerRow.Cells[i].AddParagraph(headers[i]);
+                    }
+
+                    // Add data rows
+                    int rowIndex = 0;
+                    foreach (var result in measurementResults)
+                    {
+                        Row row = table.AddRow();
+                        row.Height = Unit.FromCentimeter(0.6);
+                        row.VerticalAlignment = MigraDoc.DocumentObjectModel.Tables.VerticalAlignment.Center;
+                        row.Format.Font.Size = 8;
+
+                        // Alternating row color
+                        if (rowIndex % 2 == 1)
+                        {
+                            row.Shading.Color = MigraDoc.DocumentObjectModel.Colors.WhiteSmoke;
+                        }
+                        rowIndex++;
+
+                        row.Cells[0].AddParagraph(result.PointName);
+                        row.Cells[1].AddParagraph(result.Status.ToString());
+                        row.Cells[2].AddParagraph(result.Timestamp.ToString("g"));
+                        row.Cells[3].AddParagraph(result.ExpectedX.ToString("F4"));
+                        row.Cells[4].AddParagraph(result.ExpectedY.ToString("F4"));
+                        row.Cells[5].AddParagraph(result.ExpectedZ.ToString("F4"));
+                        row.Cells[6].AddParagraph(result.ActualX.ToString("F4"));
+                        row.Cells[7].AddParagraph(result.ActualY.ToString("F4"));
+                        row.Cells[8].AddParagraph(result.ActualZ.ToString("F4"));
+                        row.Cells[9].AddParagraph(result.Deviation.ToString("F4"));
+                        row.Cells[10].AddParagraph(result.Tolerance.ToString("F4"));
+
+                        // Color code status cell
+                        switch (result.Status)
+                        {
+                            case MeasurementStatus.Passed:
+                                row.Cells[1].Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightGreen;
+                                break;
+                            case MeasurementStatus.Failed:
+                                row.Cells[1].Shading.Color = MigraDoc.DocumentObjectModel.Colors.LightCoral;
+                                break;
+                        }
+                    }
+
+                    // --- Render and Save ---
+                    PdfDocumentRenderer renderer = new PdfDocumentRenderer();
+                    renderer.Document = document;
+                    renderer.RenderDocument();
+                    renderer.PdfDocument.Save(saveFileDialog.FileName);
+
+                    MessageBox.Show($"Report successfully saved to {saveFileDialog.FileName}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to save PDF report. Error: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void ExportCsv_Click(object sender, RoutedEventArgs e)
+        {
+            if (measurementResults == null || measurementResults.Count == 0)
+            {
+                MessageBox.Show("No measurement results to export.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var saveFileDialog = new SaveFileDialog
+            {
+                Filter = "CSV file (*.csv)|*.csv|All files (*.*)|*.*",
+                Title = "Save Measurement Report",
+                FileName = $"MeasurementReport_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+            };
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    var sb = new StringBuilder();
+                    // Add header row
+                    sb.AppendLine("PointName,Status,Timestamp,ExpectedX,ExpectedY,ExpectedZ,ActualX,ActualY,ActualZ,Deviation,Tolerance");
+
+                    // Add data rows
+                    foreach (var result in measurementResults)
+                    {
+                        var line = string.Join(",",
+                            string.Format("\"{0}\"", result.PointName.Replace("\"", "\"\"")), // Handle commas/quotes in name
+                            result.Status,
+                            result.Timestamp.ToString("o"), // ISO 8601 format for consistency
+                            result.ExpectedX,
+                            result.ExpectedY,
+                            result.ExpectedZ,
+                            result.ActualX,
+                            result.ActualY,
+                            result.ActualZ,
+                            result.Deviation,
+                            result.Tolerance);
+                        sb.AppendLine(line);
+                    }
+
+                    File.WriteAllText(saveFileDialog.FileName, sb.ToString());
+                    MessageBox.Show($"Report successfully saved to {saveFileDialog.FileName}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to save report. Error: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
         private Button CreateToolBarButton(string content, string toolTip, RoutedEventHandler clickHandler)
         {
             var button = new Button { Content = content, ToolTip = toolTip, FontWeight = FontWeights.Bold };
@@ -94,7 +323,7 @@ namespace ProgrWPF.UI
             ellipseFactory.SetValue(Ellipse.WidthProperty, 12.0);
             ellipseFactory.SetValue(Ellipse.HeightProperty, 12.0);
             ellipseFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 5, 0));
-            ellipseFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            ellipseFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
             // Binding for status color
             var statusBinding = new Binding("Status");
             var greenTrigger = new DataTrigger { Binding = statusBinding, Value = MeasurementStatus.Passed };
@@ -106,7 +335,7 @@ namespace ProgrWPF.UI
             var grayTrigger = new DataTrigger { Binding = statusBinding, Value = MeasurementStatus.NotMeasured };
             grayTrigger.Setters.Add(new Setter(Shape.FillProperty, Brushes.Gray));
 
-            var style = new Style(typeof(Ellipse));
+            var style = new System.Windows.Style(typeof(Ellipse));
             style.Triggers.Add(greenTrigger);
             style.Triggers.Add(redTrigger);
             style.Triggers.Add(orangeTrigger);
@@ -127,7 +356,7 @@ namespace ProgrWPF.UI
             // Point Name TextBlock
             var textFactory = new FrameworkElementFactory(typeof(TextBlock));
             textFactory.SetBinding(TextBlock.TextProperty, new Binding("PointName"));
-            textFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            textFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
             mainPanel.AppendChild(textFactory);
 
             template.VisualTree = mainPanel;
@@ -194,8 +423,6 @@ namespace ProgrWPF.UI
                 result.UpdateDetails();
             }
         }
-
-        private void Export_Click(object sender, RoutedEventArgs e) => MessageBox.Show("Export functionality not yet implemented.");
 
         private void Repeat_Click(object sender, RoutedEventArgs e)
         {
