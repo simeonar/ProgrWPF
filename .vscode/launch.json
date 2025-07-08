@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Framework Launch (WPF)",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/ProgrWPF/bin/Debug/ProgrWPF.exe",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}
